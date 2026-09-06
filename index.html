@@ -8,7 +8,7 @@
       * { box-sizing: border-box; }
       body {
         font-family: sans-serif;
-        background-color: #f0f2f5;
+        background: linear-gradient(135deg, #bfe0ff 0%, #e6f4ff 100%);
         margin: 0;
         min-height: 100vh;
         display: flex;
@@ -18,18 +18,19 @@
       }
 
       #card {
-        background: #f8f9fa;
+        background: #f7fbff;
+        border: 2px solid #90caf9;
         border-radius: 14px;
         padding: 24px;
         width: 100%;
         max-width: 320px;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+        box-shadow: 0 6px 20px rgba(66, 133, 244, 0.25);
         text-align: center;
       }
 
       h1 {
         font-size: 16px;
-        color: #333;
+        color: #1a5276;
         margin: 0 0 16px;
       }
 
@@ -51,26 +52,65 @@
       }
       .settingBox input {
         width: 100%;
-        padding: 8px;
-        font-size: 15px;
-        border: 1px solid #ddd;
+        padding: 10px 6px;
+        font-size: 24px;
+        font-weight: bold;
+        color: #1a3d5c;
+        border: 2px solid #90caf9;
         border-radius: 6px;
         text-align: center;
+        background: white;
       }
       .settingBox input:disabled {
-        background-color: #eee;
-        color: #999;
+        background-color: #e8eef2;
+        color: #9aa9b3;
+        border-color: #c3d9e8;
+      }
+
+      /* --- 音量調節 --- */
+      #volumeRow {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 16px;
+        text-align: left;
+      }
+      #volumeRow label {
+        font-size: 13px;
+        color: #666;
+        white-space: nowrap;
+      }
+      #volumeSlider {
+        flex: 1;
+        accent-color: #4285f4;
+      }
+      #volumeValue {
+        font-size: 12px;
+        color: #666;
+        width: 32px;
+        text-align: right;
       }
 
       /* タイマーの数字部分 */
-      #display { font-size: 32px; font-weight: bold; margin: 12px 0 20px; color: #333; border: 2px solid #ddd; border-radius: 10px; padding: 20px; background: white; }
+      #display { font-size: 32px; font-weight: bold; margin: 12px 0 20px; color: #333; border: 2px solid #90caf9; border-radius: 10px; padding: 20px; background: white; }
 
       /* ボタン全般のスタイル */
-      button { padding: 12px; font-size: 16px; cursor: pointer; width: 100%; border-radius: 5px; border: none; background-color: #4285f4; color: white; font-weight: bold; margin-bottom: 5px; }
-      button:active { background-color: #357ae8; }
+      button { padding: 12px; font-size: 16px; cursor: pointer; width: 100%; border-radius: 5px; border: none; color: white; font-weight: bold; margin-bottom: 5px; }
+
+      /* 開始・再開系（青） */
+      .btn-blue { background-color: #4285f4; }
+      .btn-blue:active { background-color: #357ae8; }
+
+      /* 停止・リセット系（赤） */
+      .btn-red { background-color: #ea4335; }
+      .btn-red:active { background-color: #c5221f; }
+
+      /* 一時停止系（黄） */
+      .btn-yellow { background-color: #fbbc05; color: #333; }
+      .btn-yellow:active { background-color: #e0a800; }
 
       /* 一時停止ボタン専用（最初は非表示） */
-      #pauseBtn { background-color: #fbbc05; color: #333; display: none; }
+      #pauseBtn { display: none; }
 
       /* 音テストボタン（少し小さく目立たない色に） */
       #testBtn { background-color: #6c757d; font-size: 11px; padding: 5px; opacity: 0.8; }
@@ -78,8 +118,17 @@
       /* 状態表示テキスト（計測中・インターバルなど） */
       #status { color: #d32f2f; margin-top: 15px; font-size: 13px; min-height: 1.5em; font-weight: bold; }
 
-      /* サイクル数表示 */
-      #cycleCount { font-size: 12px; color: #666; margin-bottom: 5px; }
+      /* サイクル数表示（バッジ風に大きく強調） */
+      #cycleCount {
+        display: inline-block;
+        font-size: 18px;
+        font-weight: bold;
+        color: white;
+        background-color: #4285f4;
+        border-radius: 20px;
+        padding: 6px 16px;
+        margin-bottom: 10px;
+      }
     </style>
   </head>
   <body>
@@ -97,11 +146,17 @@
         </div>
       </div>
 
+      <div id="volumeRow">
+        <label for="volumeSlider">🔊 音量</label>
+        <input type="range" id="volumeSlider" min="0" max="100" value="50" oninput="onVolumeChange()">
+        <span id="volumeValue">50%</span>
+      </div>
+
       <div id="cycleCount">準備完了</div>
       <div id="display">00:00</div>
       <div id="status"></div>
-      <button id="mainBtn" onclick="toggleTimer()">スタート</button>
-      <button id="pauseBtn" onclick="togglePause()">一時停止</button>
+      <button id="mainBtn" class="btn-blue" onclick="toggleTimer()">スタート</button>
+      <button id="pauseBtn" class="btn-yellow" onclick="togglePause()">一時停止</button>
       <button id="testBtn" onclick="playBeep(2)">音テスト</button>
     </div>
 
@@ -120,16 +175,40 @@
 
   const STORAGE_KEY_WORK = 'pomodoroWorkMin';
   const STORAGE_KEY_BREAK = 'pomodoroBreakMin';
+  const STORAGE_KEY_VOLUME = 'pomodoroVolume';
+  const MAX_GAIN = 0.3; // スライダー100%時の最大音量（元の固定値0.15はスライダー50%相当）
 
   // ページを開いた時に前回の設定値を復元（スプレッドシートB2/C2の代わり）
   window.addEventListener('DOMContentLoaded', () => {
     try {
       const savedWork = localStorage.getItem(STORAGE_KEY_WORK);
       const savedBreak = localStorage.getItem(STORAGE_KEY_BREAK);
+      const savedVolume = localStorage.getItem(STORAGE_KEY_VOLUME);
       if (savedWork) document.getElementById('workMin').value = savedWork;
       if (savedBreak) document.getElementById('breakMin').value = savedBreak;
+      if (savedVolume !== null) document.getElementById('volumeSlider').value = savedVolume;
     } catch (e) { /* localStorageが使えない環境でも動作は継続 */ }
+    document.getElementById('volumeValue').innerText = document.getElementById('volumeSlider').value + '%';
   });
+
+  /**
+   * 音量スライダーが動かされた時の処理
+   */
+  function onVolumeChange() {
+    const slider = document.getElementById('volumeSlider');
+    document.getElementById('volumeValue').innerText = slider.value + '%';
+    try {
+      localStorage.setItem(STORAGE_KEY_VOLUME, slider.value);
+    } catch (e) { /* 保存できなくても動作は継続 */ }
+  }
+
+  /**
+   * スライダーの値(0-100)を実際のgain値に変換
+   */
+  function getVolumeGain() {
+    const slider = document.getElementById('volumeSlider');
+    return (parseFloat(slider.value) / 100) * MAX_GAIN;
+  }
 
   /**
    * GASのgetSettings()の代わり。ページ内の入力欄から直接値を取る。
@@ -161,18 +240,19 @@
 
     const pipDuration = 0.07;
     const pipGap = 0.05;
+    const volume = getVolumeGain();
 
     for (let i = 0; i < durationSeconds; i++) {
       const cycleStart = now + i;
-      gainNode.gain.setValueAtTime(0.15, cycleStart);
+      gainNode.gain.setValueAtTime(volume, cycleStart);
       gainNode.gain.setValueAtTime(0, cycleStart + pipDuration);
 
       const secondPip = cycleStart + pipDuration + pipGap;
-      gainNode.gain.setValueAtTime(0.15, secondPip);
+      gainNode.gain.setValueAtTime(volume, secondPip);
       gainNode.gain.setValueAtTime(0, secondPip + pipDuration);
 
       const thirdPip = secondPip + pipDuration + pipGap;
-      gainNode.gain.setValueAtTime(0.15, thirdPip);
+      gainNode.gain.setValueAtTime(volume, thirdPip);
       gainNode.gain.setValueAtTime(0, thirdPip + pipDuration);
     }
     oscillator.start(now);
@@ -207,11 +287,13 @@
       clearInterval(timerId); // カウントダウンを止める
       isPaused = true;
       pauseBtn.innerText = '再開';
+      pauseBtn.classList.replace('btn-yellow', 'btn-blue');
       document.getElementById('status').innerText = '【一時停止中】';
     } else {
       // 再開する処理
       isPaused = false;
       pauseBtn.innerText = '一時停止';
+      pauseBtn.classList.replace('btn-blue', 'btn-yellow');
       // 保存しておいた残り時間と後続処理でカウントダウンを再開
       runSequence(remainingSeconds, onCompleteCallback);
     }
@@ -244,7 +326,9 @@
 
     isRunning = true;
     isPaused = false;
-    document.getElementById('mainBtn').innerText = '停止・リセット';
+    const mainBtn = document.getElementById('mainBtn');
+    mainBtn.innerText = '停止・リセット';
+    mainBtn.classList.replace('btn-blue', 'btn-red');
     pauseBtn.style.display = 'block'; // 一時停止ボタンを表示
     workInput.disabled = true;  // 計測中は設定変更不可に
     breakInput.disabled = true;
@@ -319,10 +403,14 @@
     isPaused = false;
 
     // ボタンの表示状態を戻す
-    document.getElementById('mainBtn').innerText = 'スタート';
+    const mainBtn = document.getElementById('mainBtn');
+    mainBtn.innerText = 'スタート';
+    mainBtn.classList.replace('btn-red', 'btn-blue');
     const pauseBtn = document.getElementById('pauseBtn');
     pauseBtn.style.display = 'none';
     pauseBtn.innerText = '一時停止';
+    pauseBtn.classList.remove('btn-blue');
+    pauseBtn.classList.add('btn-yellow');
 
     document.getElementById('workMin').disabled = false;
     document.getElementById('breakMin').disabled = false;
