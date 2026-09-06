@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>カウントダウンタイマー</title>
+    <style>
+      * { box-sizing: border-box; }
+      body {
+        font-family: sans-serif;
+        background-color: #f0f2f5;
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+      }
+
+      #card {
+        background: #f8f9fa;
+        border-radius: 14px;
+        padding: 24px;
+        width: 100%;
+        max-width: 320px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+        text-align: center;
+      }
+
+      h1 {
+        font-size: 16px;
+        color: #333;
+        margin: 0 0 16px;
+      }
+
+      /* --- 設定エリア --- */
+      #settings {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 16px;
+      }
+      .settingBox {
+        flex: 1;
+        text-align: left;
+      }
+      .settingBox label {
+        display: block;
+        font-size: 11px;
+        color: #666;
+        margin-bottom: 4px;
+      }
+      .settingBox input {
+        width: 100%;
+        padding: 8px;
+        font-size: 15px;
+        border: 1px solid #ddd;
+        border-radius: 6px;
+        text-align: center;
+      }
+      .settingBox input:disabled {
+        background-color: #eee;
+        color: #999;
+      }
+
+      /* タイマーの数字部分 */
+      #display { font-size: 32px; font-weight: bold; margin: 12px 0 20px; color: #333; border: 2px solid #ddd; border-radius: 10px; padding: 20px; background: white; }
+
+      /* ボタン全般のスタイル */
+      button { padding: 12px; font-size: 16px; cursor: pointer; width: 100%; border-radius: 5px; border: none; background-color: #4285f4; color: white; font-weight: bold; margin-bottom: 5px; }
+      button:active { background-color: #357ae8; }
+
+      /* 一時停止ボタン専用（最初は非表示） */
+      #pauseBtn { background-color: #fbbc05; color: #333; display: none; }
+
+      /* 音テストボタン（少し小さく目立たない色に） */
+      #testBtn { background-color: #6c757d; font-size: 11px; padding: 5px; opacity: 0.8; }
+
+      /* 状態表示テキスト（計測中・インターバルなど） */
+      #status { color: #d32f2f; margin-top: 15px; font-size: 13px; min-height: 1.5em; font-weight: bold; }
+
+      /* サイクル数表示 */
+      #cycleCount { font-size: 12px; color: #666; margin-bottom: 5px; }
+    </style>
+  </head>
+  <body>
+    <div id="card">
+      <h1>カウントダウンタイマー</h1>
+
+      <div id="settings">
+        <div class="settingBox">
+          <label for="workMin">作業(分)</label>
+          <input type="number" id="workMin" min="0.1" step="0.1" value="25">
+        </div>
+        <div class="settingBox">
+          <label for="breakMin">休憩(分)</label>
+          <input type="number" id="breakMin" min="0.1" step="0.1" value="5">
+        </div>
+      </div>
+
+      <div id="cycleCount">準備完了</div>
+      <div id="display">00:00</div>
+      <div id="status"></div>
+      <button id="mainBtn" onclick="toggleTimer()">スタート</button>
+      <button id="pauseBtn" onclick="togglePause()">一時停止</button>
+      <button id="testBtn" onclick="playBeep(2)">音テスト</button>
+    </div>
+
+<script>
+  /* --- 状態を管理する変数（グローバル変数） --- */
+  let timerId = null;      // カウントダウン（setInterval）を止めるためのID
+  let isRunning = false;   // タイマーが動いているかどうかのフラグ
+  let isPaused = false;    // 一時停止中かどうかのフラグ
+  let audioCtx = null;     // Web Audio API（音を鳴らす仕組み）の管理
+  let currentCycle = 1;    // 現在何セット目か
+  const MAX_CYCLES = 100;   // 最大何セットまで繰り返すか
+
+  // 一時停止から再開するために現在の残り時間と処理を保存する変数
+  let remainingSeconds = 0;
+  let onCompleteCallback = null;
+
+  const STORAGE_KEY_WORK = 'pomodoroWorkMin';
+  const STORAGE_KEY_BREAK = 'pomodoroBreakMin';
+
+  // ページを開いた時に前回の設定値を復元（スプレッドシートB2/C2の代わり）
+  window.addEventListener('DOMContentLoaded', () => {
+    try {
+      const savedWork = localStorage.getItem(STORAGE_KEY_WORK);
+      const savedBreak = localStorage.getItem(STORAGE_KEY_BREAK);
+      if (savedWork) document.getElementById('workMin').value = savedWork;
+      if (savedBreak) document.getElementById('breakMin').value = savedBreak;
+    } catch (e) { /* localStorageが使えない環境でも動作は継続 */ }
+  });
+
+  /**
+   * GASのgetSettings()の代わり。ページ内の入力欄から直接値を取る。
+   */
+  function getSettings() {
+    const workMin = parseFloat(document.getElementById('workMin').value);
+    const breakMin = parseFloat(document.getElementById('breakMin').value);
+    return { workMin, breakMin };
+  }
+
+  /**
+   * 電子音（ピ・ピ・ピ）を鳴らす関数
+   */
+  function playBeep(durationSeconds) {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+
+    const oscillator = audioCtx.createOscillator();
+    const gainNode = audioCtx.createGain();
+
+    oscillator.connect(gainNode);
+    gainNode.connect(audioCtx.destination);
+
+    oscillator.type = 'square';
+    oscillator.frequency.value = 1760;
+
+    const now = audioCtx.currentTime;
+    gainNode.gain.setValueAtTime(0, now);
+
+    const pipDuration = 0.07;
+    const pipGap = 0.05;
+
+    for (let i = 0; i < durationSeconds; i++) {
+      const cycleStart = now + i;
+      gainNode.gain.setValueAtTime(0.15, cycleStart);
+      gainNode.gain.setValueAtTime(0, cycleStart + pipDuration);
+
+      const secondPip = cycleStart + pipDuration + pipGap;
+      gainNode.gain.setValueAtTime(0.15, secondPip);
+      gainNode.gain.setValueAtTime(0, secondPip + pipDuration);
+
+      const thirdPip = secondPip + pipDuration + pipGap;
+      gainNode.gain.setValueAtTime(0.15, thirdPip);
+      gainNode.gain.setValueAtTime(0, thirdPip + pipDuration);
+    }
+    oscillator.start(now);
+    oscillator.stop(now + durationSeconds);
+  }
+
+  /**
+   * スタート/停止ボタンが押された時の振分け
+   */
+  function toggleTimer() {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+
+    if (isRunning) {
+      stopTimer(); // 動いていれば停止（リセット）
+    } else {
+      currentCycle = 1;
+      startTimer(); // 止まっていれば開始
+    }
+  }
+
+  /**
+   * 一時停止/再開を切り替える関数
+   */
+  function togglePause() {
+    if (!isRunning) return; // 動いていない時は何もしない
+
+    const pauseBtn = document.getElementById('pauseBtn');
+
+    if (!isPaused) {
+      // 一時停止する処理
+      clearInterval(timerId); // カウントダウンを止める
+      isPaused = true;
+      pauseBtn.innerText = '再開';
+      document.getElementById('status').innerText = '【一時停止中】';
+    } else {
+      // 再開する処理
+      isPaused = false;
+      pauseBtn.innerText = '一時停止';
+      // 保存しておいた残り時間と後続処理でカウントダウンを再開
+      runSequence(remainingSeconds, onCompleteCallback);
+    }
+  }
+
+  /**
+   * タイマーの開始処理
+   */
+  function startTimer() {
+    const statusEl = document.getElementById('status');
+    const cycleEl = document.getElementById('cycleCount');
+    const pauseBtn = document.getElementById('pauseBtn');
+    const workInput = document.getElementById('workMin');
+    const breakInput = document.getElementById('breakMin');
+
+    const settings = getSettings();
+    let workMin = settings.workMin;
+    let breakMin = settings.breakMin;
+
+    if (isNaN(workMin) || isNaN(breakMin) || workMin <= 0 || breakMin <= 0) {
+      statusEl.innerText = '設定値（作業時間・休憩時間）が正しくありません';
+      return;
+    }
+
+    // 次回開いた時のために設定値を保存
+    try {
+      localStorage.setItem(STORAGE_KEY_WORK, workMin);
+      localStorage.setItem(STORAGE_KEY_BREAK, breakMin);
+    } catch (e) { /* 保存できなくても動作は継続 */ }
+
+    isRunning = true;
+    isPaused = false;
+    document.getElementById('mainBtn').innerText = '停止・リセット';
+    pauseBtn.style.display = 'block'; // 一時停止ボタンを表示
+    workInput.disabled = true;  // 計測中は設定変更不可に
+    breakInput.disabled = true;
+
+    function loop() {
+      if (!isRunning || currentCycle > MAX_CYCLES) {
+        if (currentCycle > MAX_CYCLES) statusEl.innerText = '最大回数に達しました';
+        return;
+      }
+
+      cycleEl.innerText = 'サイクル: ' + currentCycle + ' / ' + MAX_CYCLES;
+
+      // --- ステップ1: 集中時間の計測 ---
+      statusEl.innerText = '【計測中...】';
+      runSequence(workMin * 60, () => {
+        if (!isRunning) return;
+        playBeep(3);
+
+        // --- ステップ2: 休憩時間の計測 ---
+        statusEl.innerText = '【インターバル】';
+        runSequence(breakMin * 60, () => {
+          if (!isRunning) return;
+          playBeep(3);
+          currentCycle++;
+          loop();
+        });
+      });
+    }
+    loop();
+  }
+
+  /**
+   * カウントダウン処理（一時停止のために引数を保存するように変更）
+   */
+  function runSequence(totalSec, onComplete) {
+    remainingSeconds = totalSec;   // 現在の残り秒数を保存
+    onCompleteCallback = onComplete; // 終了時の処理を保存
+
+    updateDisplay(remainingSeconds);
+
+    if (timerId) clearInterval(timerId);
+
+    timerId = setInterval(() => {
+      if (isPaused) return; // 一時停止中なら数字を減らさない
+
+      remainingSeconds--;
+      if (remainingSeconds < 0) {
+        clearInterval(timerId);
+        onComplete();
+        return;
+      }
+      updateDisplay(remainingSeconds);
+    }, 1000);
+  }
+
+  /**
+   * 画面の「00:00」表示を更新する
+   */
+  function updateDisplay(seconds) {
+    let m = Math.floor(seconds / 60);
+    let s = seconds % 60;
+    document.getElementById('display').innerText =
+      ("0" + m).slice(-2) + ":" + ("0" + s).slice(-2);
+  }
+
+  /**
+   * 全てをリセットして停止する
+   */
+  function stopTimer() {
+    if (timerId) clearInterval(timerId);
+    isRunning = false;
+    isPaused = false;
+
+    // ボタンの表示状態を戻す
+    document.getElementById('mainBtn').innerText = 'スタート';
+    const pauseBtn = document.getElementById('pauseBtn');
+    pauseBtn.style.display = 'none';
+    pauseBtn.innerText = '一時停止';
+
+    document.getElementById('workMin').disabled = false;
+    document.getElementById('breakMin').disabled = false;
+
+    document.getElementById('display').innerText = '00:00';
+    document.getElementById('status').innerText = 'リセットしました';
+    document.getElementById('cycleCount').innerText = '停止中';
+  }
+</script>
+  </body>
+</html>
