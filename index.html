@@ -98,8 +98,7 @@
       #displayWrap { position: relative; }
       #numberBox { position: relative; }
       /* 全画面中はボタンの基準を画面全体(#displayWrap)に切り替える */
-      #displayWrap:fullscreen #numberBox,
-      #displayWrap:-webkit-full-screen #numberBox {
+      #displayWrap.fsActive #numberBox {
         position: static;
       }
 
@@ -123,9 +122,13 @@
       #fullscreenBtn svg { display: block; }
       #fullscreenBtn:active { background: rgba(255, 255, 255, 0.95); }
 
-      /* --- 全画面表示中のスタイル（YouTube風にカウントダウン部分だけを画面いっぱいに） --- */
-      #displayWrap:fullscreen,
-      #displayWrap:-webkit-full-screen {
+      /* --- 全画面表示中のスタイル（YouTube風にカウントダウン部分だけを画面いっぱいに） ---
+         ブラウザ標準のFullscreen APIはiPhone(WebKit)では動作しないことがあるため、
+         実際の全画面遷移が成功したかどうかに関わらず、position:fixedで画面全体を
+         覆う「疑似全画面」をCSSだけで実現し、.fsActiveクラスで一括制御する。 */
+      #displayWrap.fsActive {
+        position: fixed;
+        inset: 0;
         width: 100vw;
         height: 100vh;
         max-width: none;
@@ -134,9 +137,9 @@
         justify-content: center;
         background: #0d1b2a;
         margin: 0;
+        z-index: 999999;
       }
-      #displayWrap:fullscreen #display,
-      #displayWrap:-webkit-full-screen #display {
+      #displayWrap.fsActive #display {
         font-size: 20vw;
         border: none;
         background: transparent;
@@ -144,8 +147,7 @@
         margin: 0;
         padding: 0;
       }
-      #displayWrap:fullscreen #fullscreenBtn,
-      #displayWrap:-webkit-full-screen #fullscreenBtn {
+      #displayWrap.fsActive #fullscreenBtn {
         top: 24px;
         right: 24px;
         background: rgba(255, 255, 255, 0.15);
@@ -154,8 +156,7 @@
       }
 
       /* 全画面中：サイクル数バッジを画面上部に固定 */
-      #displayWrap:fullscreen #cycleCount,
-      #displayWrap:-webkit-full-screen #cycleCount {
+      #displayWrap.fsActive #cycleCount {
         position: absolute;
         top: 32px;
         left: 50%;
@@ -165,8 +166,7 @@
 
       /* 全画面中：ステータス表示＋操作ボタンを画面下部に固定（普段は隠す） */
       #fsFooter { display: contents; }
-      #displayWrap:fullscreen #fsFooter,
-      #displayWrap:-webkit-full-screen #fsFooter {
+      #displayWrap.fsActive #fsFooter {
         display: block;
         position: absolute;
         bottom: 32px;
@@ -180,13 +180,11 @@
         transition: opacity 0.25s ease;
       }
       /* カーソルを下部に移動 / スマホでタップした時だけ表示 */
-      #displayWrap.showFooter:fullscreen #fsFooter,
-      #displayWrap.showFooter:-webkit-full-screen #fsFooter {
+      #displayWrap.fsActive.showFooter #fsFooter {
         opacity: 1;
         pointer-events: auto;
       }
-      #displayWrap:fullscreen #status,
-      #displayWrap:-webkit-full-screen #status {
+      #displayWrap.fsActive #status {
         color: #ff8a80;
       }
 
@@ -492,29 +490,87 @@
 
   /**
    * カウントダウン部分の全画面表示を切り替える（同じボタンでON/OFF）
+   *
+   * ブラウザ標準のFullscreen API (requestFullscreen) は、PC/Android Chromeでは
+   * 動作するが、iPhone(WebKit系ブラウザ)では未対応・失敗することがある。
+   * そのため「.fsActiveクラスをつける＝全画面表示中」として扱い、
+   * 可能ならFullscreen APIも併用（対応環境ではブラウザのアドレスバー等も隠せる）しつつ、
+   * 失敗・非対応の場合はCSSのposition:fixedによる疑似全画面のみで見た目を実現する。
    */
   function toggleFullscreen() {
-    const isFullscreen = document.fullscreenElement || document.webkitFullscreenElement;
-    if (!isFullscreen) {
-      const wrap = document.getElementById('displayWrap');
-      if (wrap.requestFullscreen) wrap.requestFullscreen();
-      else if (wrap.webkitRequestFullscreen) wrap.webkitRequestFullscreen(); // Safari対応
+    const wrap = document.getElementById('displayWrap');
+    const isActive = wrap.classList.contains('fsActive');
+    if (!isActive) {
+      enterFullscreen();
     } else {
-      if (document.exitFullscreen) document.exitFullscreen();
-      else if (document.webkitExitFullscreen) document.webkitExitFullscreen(); // Safari対応
+      exitFullscreen();
     }
   }
 
-  // 全画面の状態が変わった時にボタンのツールチップ・アイコンを更新（Escキーで解除された場合にも対応）
-  function onFullscreenChange() {
+  function supportsRealFullscreen() {
+    const el = document.documentElement;
+    const enabled = document.fullscreenEnabled || document.webkitFullscreenEnabled;
+    const canRequest = el.requestFullscreen || el.webkitRequestFullscreen;
+    return !!(enabled && canRequest);
+  }
+
+  function enterFullscreen() {
+    const wrap = document.getElementById('displayWrap');
+    if (supportsRealFullscreen()) {
+      try {
+        const request = wrap.requestFullscreen
+          ? wrap.requestFullscreen()
+          : wrap.webkitRequestFullscreen();
+        Promise.resolve(request)
+          .then(() => setFullscreenState(true))
+          .catch(() => enterPseudoFullscreen()); // 対応表明はあるが実際は失敗する環境向けフォールバック
+        return;
+      } catch (e) {
+        // requestFullscreenが同期的に例外を投げる環境向けフォールバック
+      }
+    }
+    enterPseudoFullscreen();
+  }
+
+  function enterPseudoFullscreen() {
+    document.getElementById('displayWrap').classList.add('fsPseudo');
+    document.body.style.overflow = 'hidden'; // 背景側のスクロールを止める
+    setFullscreenState(true);
+  }
+
+  function exitFullscreen() {
+    const wrap = document.getElementById('displayWrap');
+    if (wrap.classList.contains('fsPseudo')) {
+      wrap.classList.remove('fsPseudo');
+      document.body.style.overflow = '';
+      setFullscreenState(false);
+    } else if (document.exitFullscreen) {
+      document.exitFullscreen();
+    } else if (document.webkitExitFullscreen) {
+      document.webkitExitFullscreen();
+    }
+  }
+
+  // ボタンの見た目・表示状態クラスをまとめて更新
+  function setFullscreenState(isFullscreen) {
+    const wrap = document.getElementById('displayWrap');
+    wrap.classList.toggle('fsActive', isFullscreen);
     const btn = document.getElementById('fullscreenBtn');
-    const isFullscreen = document.fullscreenElement || document.webkitFullscreenElement;
     btn.title = isFullscreen ? '全画面解除' : '全画面表示';
     document.getElementById('fsIconExpand').hidden = isFullscreen;
     document.getElementById('fsIconCompress').hidden = !isFullscreen;
-    // 全画面の出入りをまたいで表示状態が残らないようにリセット
+    // 全画面の出入りをまたいで下部ボタンの表示状態が残らないようにリセット
     clearTimeout(fsFooterHideTimer);
-    document.getElementById('displayWrap').classList.remove('showFooter');
+    wrap.classList.remove('showFooter');
+  }
+
+  // ブラウザ標準のFullscreen APIが実際に有効/解除された時（Escキーで解除された場合を含む）に追従
+  function onFullscreenChange() {
+    const isNativeFullscreen = !!(document.fullscreenElement || document.webkitFullscreenElement);
+    const wrap = document.getElementById('displayWrap');
+    if (!isNativeFullscreen && !wrap.classList.contains('fsPseudo')) {
+      setFullscreenState(false);
+    }
   }
   document.addEventListener('fullscreenchange', onFullscreenChange);
   document.addEventListener('webkitfullscreenchange', onFullscreenChange);
@@ -524,7 +580,7 @@
   const FS_BOTTOM_ZONE_RATIO = 0.82; // 画面高さの下側18%にカーソルがあれば表示対象
 
   function isFullscreenNow() {
-    return !!(document.fullscreenElement || document.webkitFullscreenElement);
+    return document.getElementById('displayWrap').classList.contains('fsActive');
   }
 
   function showFsFooter() {
