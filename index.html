@@ -566,7 +566,46 @@
     // 全画面の出入りをまたいで下部ボタンの表示状態が残らないようにリセット
     clearTimeout(fsFooterHideTimer);
     wrap.classList.remove('showFooter');
+    if (isFullscreen) {
+      syncFsViewportBox();
+    } else {
+      // 次回また合わなくなるのを防ぐため、固定していたサイズ指定を解除
+      wrap.style.width = '';
+      wrap.style.height = '';
+      wrap.style.top = '';
+      wrap.style.left = '';
+    }
   }
+
+  /**
+   * 全画面(疑似)の表示範囲を、実際に見えている領域(visualViewport)に合わせる。
+   * position:fixed; top/right/bottom/left:0 だけだと、スマホでアドレスバーが
+   * 出ている時（特に横→縦に回転した直後）に実際の表示領域より大きいサイズに
+   * なり、下部のボタンがアドレスバーの裏に隠れてしまうことがあったための対策。
+   */
+  function syncFsViewportBox() {
+    const wrap = document.getElementById('displayWrap');
+    if (!wrap.classList.contains('fsActive')) return;
+    const vv = window.visualViewport;
+    if (vv) {
+      wrap.style.width = vv.width + 'px';
+      wrap.style.height = vv.height + 'px';
+      wrap.style.left = vv.offsetLeft + 'px';
+      wrap.style.top = vv.offsetTop + 'px';
+    } else {
+      wrap.style.width = window.innerWidth + 'px';
+      wrap.style.height = window.innerHeight + 'px';
+      wrap.style.left = '0px';
+      wrap.style.top = '0px';
+    }
+  }
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', syncFsViewportBox);
+    window.visualViewport.addEventListener('scroll', syncFsViewportBox);
+  }
+  window.addEventListener('resize', syncFsViewportBox);
+  // 回転直後はvisualViewportの値がまだ更新されていないことがあるため少し遅らせて再計算
+  window.addEventListener('orientationchange', () => setTimeout(syncFsViewportBox, 150));
 
   // ブラウザ標準のFullscreen APIが実際に有効/解除された時（Escキーで解除された場合を含む）に追従
   function onFullscreenChange() {
@@ -609,22 +648,26 @@
     }
   });
 
-  // タッチ操作: タップするたびに表示⇔非表示を切り替える（自動では隠さない）
-  // ただし、表示中のフッター（ステータス・ボタン）自体へのタップは切り替え対象にしない。
-  // ここで隠してしまうとボタンがpointer-events:noneになり、直後のclickが成立しなくなるため。
-  document.addEventListener('touchstart', (e) => {
+  // タッチ操作の検知のみ行う（表示⇔非表示の切り替えはclickイベント側で行う）
+  document.addEventListener('touchstart', () => {
     usingTouch = true;
-    if (!isFullscreenNow()) return;
+  }, { passive: true });
+
+  // タッチ端末: タップするたびに表示⇔非表示を切り替える（自動では隠さない）
+  // touchstart時点で判定すると、ボタンを隠す処理と実際のタップ操作(その後発生する
+  // click)が競合し、ボタンのclickが成立しないことがあったため、ボタン自身の
+  // onclickと同じ「click」イベントで判定するようにした（同一イベント内なので競合しない）。
+  document.addEventListener('click', (e) => {
+    if (!usingTouch || !isFullscreenNow()) return;
     const footer = document.getElementById('fsFooter');
-    if (footer.contains(e.target)) return;
-    clearTimeout(fsFooterHideTimer);
+    if (footer.contains(e.target)) return; // フッター（ステータス・ボタン）自体へのタップは対象外
     const wrap = document.getElementById('displayWrap');
     if (wrap.classList.contains('showFooter')) {
       hideFsFooter();
     } else {
       showFsFooter();
     }
-  }, { passive: true });
+  });
 
   /**
    * 画面の「00:00」表示を更新する
