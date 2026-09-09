@@ -572,10 +572,10 @@
     wrap.classList.remove('showFooter');
     if (isFullscreen) {
       syncFsViewportBox();
-      // 全画面遷移直後はアドレスバーの表示状態がまだ確定していないことがあるため、
-      // 少し時間を置いて位置合わせをやり直す
-      setTimeout(syncFsViewportBox, 100);
-      setTimeout(syncFsViewportBox, 400);
+      // ページを開いて最初に全画面にした時だけ、ブラウザ内部でvisualViewportの
+      // 値の確定が遅れることがある（回転を挟むと直る＝タイミングの問題）ため、
+      // 一定時間、位置合わせを繰り返して確定した値を確実に拾う
+      scheduleFsViewportResync();
     } else {
       // 次回また合わなくなるのを防ぐため、固定していたサイズ指定を解除
       wrap.style.width = '';
@@ -614,6 +614,21 @@
   window.addEventListener('resize', syncFsViewportBox);
   // 回転直後はvisualViewportの値がまだ更新されていないことがあるため少し遅らせて再計算
   window.addEventListener('orientationchange', () => setTimeout(syncFsViewportBox, 150));
+
+  // 全画面に入った直後の一定時間、位置合わせを繰り返す（ページを開いて最初の
+  // 全画面表示だけvisualViewportの値の確定が遅れることがあるため、間隔を空けて
+  // 何度か読み直し、確定した正しい値を確実に反映させる）
+  function scheduleFsViewportResync() {
+    const deadline = Date.now() + 2000;
+    function tick() {
+      syncFsViewportBox();
+      const wrap = document.getElementById('displayWrap');
+      if (Date.now() < deadline && wrap.classList.contains('fsActive')) {
+        setTimeout(tick, 150);
+      }
+    }
+    tick();
+  }
 
   // ブラウザ標準のFullscreen APIが実際に有効/解除された時（Escキーで解除された場合を含む）に追従
   function onFullscreenChange() {
