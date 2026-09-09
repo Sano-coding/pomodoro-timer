@@ -2,7 +2,7 @@
 <html lang="ja">
   <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>カウントダウンタイマー</title>
     <style>
       * { box-sizing: border-box; }
@@ -159,10 +159,10 @@
         border-color: rgba(255, 255, 255, 0.4);
       }
 
-      /* 全画面中：サイクル数バッジを画面上部に固定 */
+      /* 全画面中：サイクル数バッジを画面上部に固定（ノッチ等のセーフエリア分も余白を確保） */
       #displayWrap.fsActive #cycleCount {
         position: absolute;
-        top: 32px;
+        top: calc(32px + env(safe-area-inset-top, 0px));
         left: 50%;
         transform: translateX(-50%);
         margin: 0;
@@ -173,7 +173,7 @@
       #displayWrap.fsActive #fsFooter {
         display: block;
         position: absolute;
-        bottom: 32px;
+        bottom: calc(32px + env(safe-area-inset-bottom, 0px));
         left: 50%;
         transform: translateX(-50%);
         width: 100%;
@@ -572,6 +572,10 @@
     wrap.classList.remove('showFooter');
     if (isFullscreen) {
       syncFsViewportBox();
+      // 全画面遷移直後はアドレスバーの表示状態がまだ確定していないことがあるため、
+      // 少し時間を置いて位置合わせをやり直す
+      setTimeout(syncFsViewportBox, 100);
+      setTimeout(syncFsViewportBox, 400);
     } else {
       // 次回また合わなくなるのを防ぐため、固定していたサイズ指定を解除
       wrap.style.width = '';
