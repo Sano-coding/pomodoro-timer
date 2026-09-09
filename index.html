@@ -96,6 +96,12 @@
 
       /* 数字表示＋全画面ボタンをまとめる枠 */
       #displayWrap { position: relative; }
+      #numberBox { position: relative; }
+      /* 全画面中はボタンの基準を画面全体(#displayWrap)に切り替える */
+      #displayWrap:fullscreen #numberBox,
+      #displayWrap:-webkit-full-screen #numberBox {
+        position: static;
+      }
 
       /* 全画面切り替えボタン（数字の右上に重ねて表示） */
       #fullscreenBtn {
@@ -143,6 +149,34 @@
         background: rgba(255, 255, 255, 0.15);
         color: #eaf4ff;
         border-color: rgba(255, 255, 255, 0.4);
+      }
+
+      /* 全画面中：サイクル数バッジを画面上部に固定 */
+      #displayWrap:fullscreen #cycleCount,
+      #displayWrap:-webkit-full-screen #cycleCount {
+        position: absolute;
+        top: 32px;
+        left: 50%;
+        transform: translateX(-50%);
+        margin: 0;
+      }
+
+      /* 全画面中：ステータス表示＋操作ボタンを画面下部に固定 */
+      #fsFooter { display: contents; }
+      #displayWrap:fullscreen #fsFooter,
+      #displayWrap:-webkit-full-screen #fsFooter {
+        display: block;
+        position: absolute;
+        bottom: 32px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 100%;
+        max-width: 320px;
+        padding: 0 20px;
+      }
+      #displayWrap:fullscreen #status,
+      #displayWrap:-webkit-full-screen #status {
+        color: #ff8a80;
       }
 
       /* ボタン全般のスタイル */
@@ -203,14 +237,18 @@
         <span id="volumeValue">50%</span>
       </div>
 
-      <div id="cycleCount">準備完了</div>
       <div id="displayWrap">
-        <div id="display">00:00</div>
-        <button id="fullscreenBtn" type="button" onclick="toggleFullscreen()" title="全画面表示">⛶</button>
+        <div id="cycleCount">準備完了</div>
+        <div id="numberBox">
+          <div id="display">00:00</div>
+          <button id="fullscreenBtn" type="button" onclick="toggleFullscreen()" title="全画面表示">⛶</button>
+        </div>
+        <div id="fsFooter">
+          <div id="status"></div>
+          <button id="mainBtn" class="btn-blue" onclick="toggleTimer()">スタート</button>
+          <button id="pauseBtn" class="btn-yellow" onclick="togglePause()">一時停止</button>
+        </div>
       </div>
-      <div id="status"></div>
-      <button id="mainBtn" class="btn-blue" onclick="toggleTimer()">スタート</button>
-      <button id="pauseBtn" class="btn-yellow" onclick="togglePause()">一時停止</button>
       <button id="testBtn" onclick="playBeep(2)">音テスト</button>
     </div>
 
