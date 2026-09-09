@@ -161,7 +161,7 @@
         margin: 0;
       }
 
-      /* 全画面中：ステータス表示＋操作ボタンを画面下部に固定 */
+      /* 全画面中：ステータス表示＋操作ボタンを画面下部に固定（普段は隠す） */
       #fsFooter { display: contents; }
       #displayWrap:fullscreen #fsFooter,
       #displayWrap:-webkit-full-screen #fsFooter {
@@ -173,6 +173,15 @@
         width: 100%;
         max-width: 320px;
         padding: 0 20px;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.25s ease;
+      }
+      /* カーソルを下部に移動 / スマホでタップした時だけ表示 */
+      #displayWrap.showFooter:fullscreen #fsFooter,
+      #displayWrap.showFooter:-webkit-full-screen #fsFooter {
+        opacity: 1;
+        pointer-events: auto;
       }
       #displayWrap:fullscreen #status,
       #displayWrap:-webkit-full-screen #status {
@@ -496,9 +505,47 @@
     const btn = document.getElementById('fullscreenBtn');
     const isFullscreen = document.fullscreenElement || document.webkitFullscreenElement;
     btn.title = isFullscreen ? '全画面解除' : '全画面表示';
+    // 全画面の出入りをまたいで表示状態が残らないようにリセット
+    clearTimeout(fsFooterHideTimer);
+    document.getElementById('displayWrap').classList.remove('showFooter');
   }
   document.addEventListener('fullscreenchange', onFullscreenChange);
   document.addEventListener('webkitfullscreenchange', onFullscreenChange);
+
+  /* --- 全画面中：カーソルが画面下部にある間／タップした直後だけ操作ボタンを表示 --- */
+  let fsFooterHideTimer = null;
+  const FS_BOTTOM_ZONE_RATIO = 0.82; // 画面高さの下側18%にカーソルがあれば表示対象
+
+  function isFullscreenNow() {
+    return !!(document.fullscreenElement || document.webkitFullscreenElement);
+  }
+
+  function showFsFooter() {
+    document.getElementById('displayWrap').classList.add('showFooter');
+  }
+
+  function hideFsFooter() {
+    document.getElementById('displayWrap').classList.remove('showFooter');
+  }
+
+  // マウス操作: カーソルが下部にある間だけ表示し、離れたら隠す
+  document.addEventListener('mousemove', (e) => {
+    if (!isFullscreenNow()) return;
+    clearTimeout(fsFooterHideTimer);
+    if (e.clientY >= window.innerHeight * FS_BOTTOM_ZONE_RATIO) {
+      showFsFooter();
+    } else {
+      fsFooterHideTimer = setTimeout(hideFsFooter, 300); // 通過しただけの時のチラつき防止
+    }
+  });
+
+  // タッチ操作: 一度タップしたら一時的に表示し、しばらくしたら自動で隠す
+  document.addEventListener('touchstart', () => {
+    if (!isFullscreenNow()) return;
+    clearTimeout(fsFooterHideTimer);
+    showFsFooter();
+    fsFooterHideTimer = setTimeout(hideFsFooter, 3000);
+  }, { passive: true });
 
   /**
    * 画面の「00:00」表示を更新する
