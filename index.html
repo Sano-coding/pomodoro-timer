@@ -94,6 +94,57 @@
       /* タイマーの数字部分 */
       #display { font-size: 32px; font-weight: bold; margin: 12px 0 20px; color: #333; border: 2px solid #90caf9; border-radius: 10px; padding: 20px; background: white; }
 
+      /* 数字表示＋全画面ボタンをまとめる枠 */
+      #displayWrap { position: relative; }
+
+      /* 全画面切り替えボタン（数字の右上に重ねて表示） */
+      #fullscreenBtn {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        width: 30px;
+        height: 30px;
+        padding: 0;
+        margin: 0;
+        font-size: 15px;
+        line-height: 30px;
+        background: rgba(255, 255, 255, 0.75);
+        color: #1a5276;
+        border: 1px solid #90caf9;
+        border-radius: 6px;
+      }
+      #fullscreenBtn:active { background: rgba(255, 255, 255, 0.95); }
+
+      /* --- 全画面表示中のスタイル（YouTube風にカウントダウン部分だけを画面いっぱいに） --- */
+      #displayWrap:fullscreen,
+      #displayWrap:-webkit-full-screen {
+        width: 100vw;
+        height: 100vh;
+        max-width: none;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #0d1b2a;
+        margin: 0;
+      }
+      #displayWrap:fullscreen #display,
+      #displayWrap:-webkit-full-screen #display {
+        font-size: 20vw;
+        border: none;
+        background: transparent;
+        color: #eaf4ff;
+        margin: 0;
+        padding: 0;
+      }
+      #displayWrap:fullscreen #fullscreenBtn,
+      #displayWrap:-webkit-full-screen #fullscreenBtn {
+        top: 24px;
+        right: 24px;
+        background: rgba(255, 255, 255, 0.15);
+        color: #eaf4ff;
+        border-color: rgba(255, 255, 255, 0.4);
+      }
+
       /* ボタン全般のスタイル */
       button { padding: 12px; font-size: 16px; cursor: pointer; width: 100%; border-radius: 5px; border: none; color: white; font-weight: bold; margin-bottom: 5px; }
 
@@ -153,7 +204,10 @@
       </div>
 
       <div id="cycleCount">準備完了</div>
-      <div id="display">00:00</div>
+      <div id="displayWrap">
+        <div id="display">00:00</div>
+        <button id="fullscreenBtn" type="button" onclick="toggleFullscreen()" title="全画面表示">⛶</button>
+      </div>
       <div id="status"></div>
       <button id="mainBtn" class="btn-blue" onclick="toggleTimer()">スタート</button>
       <button id="pauseBtn" class="btn-yellow" onclick="togglePause()">一時停止</button>
@@ -383,6 +437,30 @@
       updateDisplay(remainingSeconds);
     }, 1000);
   }
+
+  /**
+   * カウントダウン部分の全画面表示を切り替える（同じボタンでON/OFF）
+   */
+  function toggleFullscreen() {
+    const isFullscreen = document.fullscreenElement || document.webkitFullscreenElement;
+    if (!isFullscreen) {
+      const wrap = document.getElementById('displayWrap');
+      if (wrap.requestFullscreen) wrap.requestFullscreen();
+      else if (wrap.webkitRequestFullscreen) wrap.webkitRequestFullscreen(); // Safari対応
+    } else {
+      if (document.exitFullscreen) document.exitFullscreen();
+      else if (document.webkitExitFullscreen) document.webkitExitFullscreen(); // Safari対応
+    }
+  }
+
+  // 全画面の状態が変わった時にボタンのツールチップを更新（Escキーで解除された場合にも対応）
+  function onFullscreenChange() {
+    const btn = document.getElementById('fullscreenBtn');
+    const isFullscreen = document.fullscreenElement || document.webkitFullscreenElement;
+    btn.title = isFullscreen ? '全画面解除' : '全画面表示';
+  }
+  document.addEventListener('fullscreenchange', onFullscreenChange);
+  document.addEventListener('webkitfullscreenchange', onFullscreenChange);
 
   /**
    * 画面の「00:00」表示を更新する
