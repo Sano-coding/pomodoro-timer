@@ -261,8 +261,8 @@
         </div>
         <div id="fsFooter">
           <div id="status"></div>
-          <button id="mainBtn" class="btn-blue" onclick="toggleTimer()">スタート</button>
-          <button id="pauseBtn" class="btn-yellow" onclick="togglePause()">一時停止</button>
+          <button id="mainBtn" class="btn-blue" onclick="toggleTimer(event)">スタート</button>
+          <button id="pauseBtn" class="btn-yellow" onclick="togglePause(event)">一時停止</button>
         </div>
       </div>
       <button id="testBtn" onclick="playBeep(2)">音テスト</button>
@@ -370,7 +370,9 @@
   /**
    * スタート/停止ボタンが押された時の振分け
    */
-  function toggleTimer() {
+  function toggleTimer(event) {
+    // 全画面中の「ボタン以外をタップしたら隠す」処理へこのタップが伝わらないようにする
+    if (event) event.stopPropagation();
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     if (audioCtx.state === 'suspended') audioCtx.resume();
 
@@ -385,7 +387,9 @@
   /**
    * 一時停止/再開を切り替える関数
    */
-  function togglePause() {
+  function togglePause(event) {
+    // 全画面中の「ボタン以外をタップしたら隠す」処理へこのタップが伝わらないようにする
+    if (event) event.stopPropagation();
     if (!isRunning) return; // 動いていない時は何もしない
 
     const pauseBtn = document.getElementById('pauseBtn');
@@ -654,13 +658,13 @@
   }, { passive: true });
 
   // タッチ端末: タップするたびに表示⇔非表示を切り替える（自動では隠さない）
-  // touchstart時点で判定すると、ボタンを隠す処理と実際のタップ操作(その後発生する
-  // click)が競合し、ボタンのclickが成立しないことがあったため、ボタン自身の
-  // onclickと同じ「click」イベントで判定するようにした（同一イベント内なので競合しない）。
+  // - ボタン(mainBtn/pauseBtn)自身がタップされた場合は、ボタン側のonclickで
+  //   event.stopPropagation()を呼んでいるため、このハンドラには届かない
+  //   （＝ボタンの処理だけが実行され、表示が隠れることはない）。
+  // - それ以外（フッター内のステータス文字も含む）がタップされた場合はここに届き、
+  //   表示中なら隠す・非表示中なら表示する、という単純なトグルになる。
   document.addEventListener('click', (e) => {
     if (!usingTouch || !isFullscreenNow()) return;
-    const footer = document.getElementById('fsFooter');
-    if (footer.contains(e.target)) return; // フッター（ステータス・ボタン）自体へのタップは対象外
     const wrap = document.getElementById('displayWrap');
     if (wrap.classList.contains('showFooter')) {
       hideFsFooter();
