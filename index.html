@@ -575,9 +575,12 @@
   document.addEventListener('fullscreenchange', onFullscreenChange);
   document.addEventListener('webkitfullscreenchange', onFullscreenChange);
 
-  /* --- 全画面中：カーソルが画面下部にある間／タップした直後だけ操作ボタンを表示 --- */
+  /* --- 全画面中：カーソルが画面下部にある間（PC）／タップするたびに表示・非表示を切替（スマホ）--- */
   let fsFooterHideTimer = null;
   const FS_BOTTOM_ZONE_RATIO = 0.82; // 画面高さの下側18%にカーソルがあれば表示対象
+  let usingTouch = false; // タッチ操作を検知したら、以後はタップ判定のみを使う
+                           // （タップ後にブラウザが発火させる疑似マウスイベントに、
+                           //   PC向けのカーソル位置判定が反応してすぐ隠れてしまうのを防ぐ）
 
   function isFullscreenNow() {
     return document.getElementById('displayWrap').classList.contains('fsActive');
@@ -593,7 +596,7 @@
 
   // マウス操作: カーソルが下部にある間だけ表示し、離れたら隠す
   document.addEventListener('mousemove', (e) => {
-    if (!isFullscreenNow()) return;
+    if (usingTouch || !isFullscreenNow()) return;
     clearTimeout(fsFooterHideTimer);
     if (e.clientY >= window.innerHeight * FS_BOTTOM_ZONE_RATIO) {
       showFsFooter();
@@ -602,13 +605,17 @@
     }
   });
 
-  // タッチ操作: 一度タップしたら一時的に表示し、しばらくしたら自動で隠す
-  const FS_FOOTER_TOUCH_VISIBLE_MS = 8000; // スマホでの表示継続時間
+  // タッチ操作: タップするたびに表示⇔非表示を切り替える（自動では隠さない）
   document.addEventListener('touchstart', () => {
+    usingTouch = true;
     if (!isFullscreenNow()) return;
     clearTimeout(fsFooterHideTimer);
-    showFsFooter();
-    fsFooterHideTimer = setTimeout(hideFsFooter, FS_FOOTER_TOUCH_VISIBLE_MS);
+    const wrap = document.getElementById('displayWrap');
+    if (wrap.classList.contains('showFooter')) {
+      hideFsFooter();
+    } else {
+      showFsFooter();
+    }
   }, { passive: true });
 
   /**
