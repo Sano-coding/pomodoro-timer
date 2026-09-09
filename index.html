@@ -128,9 +128,13 @@
          覆う「疑似全画面」をCSSだけで実現し、.fsActiveクラスで一括制御する。 */
       #displayWrap.fsActive {
         position: fixed;
-        inset: 0;
-        width: 100vw;
-        height: 100vh;
+        /* 100vw/100vhではなくtop/right/bottom/leftの0指定で埋める。
+           スマホ縦画面はアドレスバー分だけ100vhが実際の表示領域よりも
+           大きくなり、下部のボタンが画面外にはみ出す不具合があったため。 */
+        top: 0;
+        right: 0;
+        bottom: 0;
+        left: 0;
         max-width: none;
         display: flex;
         align-items: center;
@@ -606,9 +610,13 @@
   });
 
   // タッチ操作: タップするたびに表示⇔非表示を切り替える（自動では隠さない）
-  document.addEventListener('touchstart', () => {
+  // ただし、表示中のフッター（ステータス・ボタン）自体へのタップは切り替え対象にしない。
+  // ここで隠してしまうとボタンがpointer-events:noneになり、直後のclickが成立しなくなるため。
+  document.addEventListener('touchstart', (e) => {
     usingTouch = true;
     if (!isFullscreenNow()) return;
+    const footer = document.getElementById('fsFooter');
+    if (footer.contains(e.target)) return;
     clearTimeout(fsFooterHideTimer);
     const wrap = document.getElementById('displayWrap');
     if (wrap.classList.contains('showFooter')) {
