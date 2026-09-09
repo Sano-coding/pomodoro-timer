@@ -112,13 +112,15 @@
         height: 30px;
         padding: 0;
         margin: 0;
-        font-size: 15px;
-        line-height: 30px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
         background: rgba(255, 255, 255, 0.75);
         color: #1a5276;
         border: 1px solid #90caf9;
         border-radius: 6px;
       }
+      #fullscreenBtn svg { display: block; }
       #fullscreenBtn:active { background: rgba(255, 255, 255, 0.95); }
 
       /* --- 全画面表示中のスタイル（YouTube風にカウントダウン部分だけを画面いっぱいに） --- */
@@ -250,7 +252,10 @@
         <div id="cycleCount">準備完了</div>
         <div id="numberBox">
           <div id="display">00:00</div>
-          <button id="fullscreenBtn" type="button" onclick="toggleFullscreen()" title="全画面表示">⛶</button>
+          <button id="fullscreenBtn" type="button" onclick="toggleFullscreen()" title="全画面表示">
+            <svg id="fsIconExpand" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M16 3h3a2 2 0 0 1 2 2v3"/><path d="M21 16v3a2 2 0 0 1-2 2h-3"/><path d="M8 21H5a2 2 0 0 1-2-2v-3"/></svg>
+            <svg id="fsIconCompress" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" hidden><path d="M8 3v3a2 2 0 0 1-2 2H3"/><path d="M21 8h-3a2 2 0 0 1-2-2V3"/><path d="M3 16h3a2 2 0 0 1 2 2v3"/><path d="M16 21v-3a2 2 0 0 1 2-2h3"/></svg>
+          </button>
         </div>
         <div id="fsFooter">
           <div id="status"></div>
@@ -500,11 +505,13 @@
     }
   }
 
-  // 全画面の状態が変わった時にボタンのツールチップを更新（Escキーで解除された場合にも対応）
+  // 全画面の状態が変わった時にボタンのツールチップ・アイコンを更新（Escキーで解除された場合にも対応）
   function onFullscreenChange() {
     const btn = document.getElementById('fullscreenBtn');
     const isFullscreen = document.fullscreenElement || document.webkitFullscreenElement;
     btn.title = isFullscreen ? '全画面解除' : '全画面表示';
+    document.getElementById('fsIconExpand').hidden = isFullscreen;
+    document.getElementById('fsIconCompress').hidden = !isFullscreen;
     // 全画面の出入りをまたいで表示状態が残らないようにリセット
     clearTimeout(fsFooterHideTimer);
     document.getElementById('displayWrap').classList.remove('showFooter');
